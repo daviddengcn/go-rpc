@@ -10,7 +10,8 @@ Different from the <code>net/rpc</code> package. The methods of the serving obje
 The only requirement is the parameters and return values are be represented by JSON.
 
 The first parameter could be *http.Request, which will be set to the instance in the handler,
-and not counts to the NumIn in client.Call. This is especially usefully in Google App Engine.
+and not counts to the NumIn in client.Call. This is especially usefully in 
+[Google App Engine](https://developers.google.com/appengine/).
 
 Example
 =======
