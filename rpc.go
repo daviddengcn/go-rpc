@@ -36,9 +36,9 @@
 package rpc
 
 import (
-	"io"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -67,7 +67,8 @@ const DefaultPath = "/_http_rpc"
 const (
 	ErrCodeOk            int = iota // Ok
 	ErrCodeUnknownMethod            // Unknown method name
-	ErrCodePanic					// panic in a call
+	ErrCodePanic                    // panic in a call
+	ErrCodeServerError              // http code is not 200
 )
 
 type RpcError struct {
@@ -83,6 +84,8 @@ func (err RpcError) Error() string {
 		return "Unknown method: " + err.Info
 	case ErrCodePanic:
 		return "Panic in call: " + err.Info
+	case ErrCodeServerError:
+		return "Server error: " + err.Info
 	}
 	return fmt.Sprintf("Rpc Error: code = %d, info = %s", err.Code, err.Info)
 }
@@ -139,7 +142,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		outs = mi.funcValue.Call(callArr)
 		return
 	}()
-	
+
 	if hasPanic {
 		(&rpcResponse{
 			Code: ErrCodePanic,
@@ -243,13 +246,13 @@ func NewClientPath(httpClient *http.Client, host, path string) *Client {
 }
 
 /*
-	Call makes a RPC. numIn here is to distinguish the parameters(in's) from
+	Call makes an RPC. numIn here is to distinguish the parameters(in's) from
 	return values (out's) in inPOuts. For return values, the pointers of
 	receiving variables are needed.
-	
+
 	The following call implies the Method has 3 parameters and 2 return values.
 	   client.Call(3, "Method", p1, p2, p3, &r1, &r2)
-	
+
 	If the first parameter of the Method is a *http.Request, it has totally 4
 	parameters.
 */
@@ -270,6 +273,13 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	if err != nil {
 		return err
 	}
+	if resp.StatusCode != 200 {
+		return RpcError{
+			Code: ErrCodeServerError,
+			Info: fmt.Sprintf("Http status code: %d", resp.StatusCode),
+		}
+	}
+
 	defer resp.Body.Close()
 
 	dec := json.NewDecoder(resp.Body)

@@ -93,7 +93,7 @@ func TestFail(t *testing.T) {
 		if !ok {
 			t.Errorf("Should be a rpcError, but got %v", err)
 		}
-		
+
 		if rpcErr.Code != ErrCodeUnknownMethod {
 			t.Errorf("Code should be %d, but got %d", ErrCodeUnknownMethod, rpcErr.Code)
 		}
@@ -110,7 +110,7 @@ func TestFail(t *testing.T) {
 		if !ok {
 			t.Errorf("Should be a rpcError, but got %v", err)
 		}
-		
+
 		if rpcErr.Code != ErrCodePanic {
 			t.Errorf("Code should be %d, but got %d", ErrCodePanic, rpcErr.Code)
 		}
