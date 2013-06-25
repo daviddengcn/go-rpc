@@ -5,7 +5,7 @@
 	are be represented by JSON.
 
 	The first parameter could be *http.Request, which will be set to the
-	instance in the handler, and not count to the NumIn in client.Call. This is
+	instance in the handler, and not counts to the NumIn in client.Call. This is
 	especially usefully in Google App Engine.
 
 	Example:
@@ -244,8 +244,14 @@ func NewClientPath(httpClient *http.Client, host, path string) *Client {
 
 /*
 	Call makes a RPC. numIn here is to distinguish the parameters(in's) from
-	return values (out's) in inPOuts. For the return values, the pointers of
-	each receiving variable is needed.
+	return values (out's) in inPOuts. For return values, the pointers of
+	receiving variables are needed.
+	
+	The following call implies the Method has 3 paramters and 2 return values.
+	   client.Call(3, "Method", p1, p2, p3, &r1, &r2)
+	
+	If the first parameter of the Method is a *http.Request, it has totally 4
+	parameters.
 */
 func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	inJsons := make([]string, numIn)
