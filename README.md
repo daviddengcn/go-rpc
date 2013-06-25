@@ -13,28 +13,28 @@ Example
 =======
 
 ```go
-  	//// Shared
-		type Arith int
+//// The server model
+type Arith int
 		
-		func (*Arith) Add(a, b int) int {
-			return a + b
-		}
+func (*Arith) Add(a, b int) int {
+	return a + b
+}
 		
-		//// Server
-		Register(new(Arith))
+//// Server
+Register(new(Arith))
 	
-		http.ListenAndServe(":1235", nil)
+http.ListenAndServe(":1235", nil)
     
 		
-		//// Client
-		client := NewClient(http.DefaultClient, "http://localhost:1235")
+//// Client
+client := NewClient(http.DefaultClient, "http://localhost:1235")
 	
-		A, B := 1, 2
-		var C int
-		err := client.Call(2, "Add", A, B, &C)
+A, B := 1, 2
+var C int
+err := client.Call(2, "Add", A, B, &C)
 ```
 
-You needn't define a type of input arguments for each method, as in using net/rpc.
+You needn't define a type of input arguments for each method, as in using <code>net/rpc</code>.
 
 LICENSE
 =======
