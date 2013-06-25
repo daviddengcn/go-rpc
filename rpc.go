@@ -4,25 +4,34 @@
 	of much flexible. The only requirement is the parameters and return values
 	are be represented by JSON.
 
+	The first parameter could be *http.Request, which will be set to the
+	instance in the handler, and not count to the NumIn in client.Call. This is
+	especially usefully in Google App Engine.
+
 	Example:
 		//// Shared
 		type Arith int
-		
+
 		func (*Arith) Add(a, b int) int {
 			return a + b
 		}
-		
+
+		func (*Arith) Sub(r *http.Request, a, b int) int {
+			return a - b
+		}
+
 		//// Server
 		Register(new(Arith))
-	
+
 		go http.ListenAndServe(":1235", nil)
-		
+
 		//// Client
 		rpcClient := NewClient(http.DefaultClient, "http://localhost:1235")
-	
+
 		A, B := 1, 2
 		var C int
 		err := rpcClient.Call(2, "Add", A, B, &C)
+		err = rpcClient.Call(2, "Sub", A, B, &C)
 */
 package rpc
 
@@ -36,8 +45,9 @@ import (
 )
 
 type methodInfo struct {
-	funcValue reflect.Value
-	inTypes   []reflect.Type
+	funcValue   reflect.Value
+	needRequest bool
+	inTypes     []reflect.Type
 }
 
 /*
@@ -80,15 +90,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callArr := make([]reflect.Value, len(mi.inTypes)+1) // plus 1 for the receiver
+	// plus 1 for the receiver, and needRequest
+	callArr := make([]reflect.Value, 1, len(mi.inTypes)+2)
 	callArr[0] = s.oValue
+
+	if mi.needRequest {
+		callArr = append(callArr, reflect.ValueOf(r))
+	}
 
 	inJsons := r.Form["in"]
 	// set parameters
 	for i := range mi.inTypes {
 		pInV := reflect.New(mi.inTypes[i])
 		json.Unmarshal([]byte(inJsons[i]), pInV.Interface())
-		callArr[i+1] = reflect.Indirect(pInV)
+		callArr = append(callArr, reflect.Indirect(pInV))
 	}
 
 	outs := mi.funcValue.Call(callArr)
@@ -106,6 +121,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(replyJson)
 }
 
+var (
+	pHttpRequestType reflect.Type = reflect.TypeOf((*http.Request)(nil))
+)
+
 /*
 	NewServer creates a *Server instance for an object o, whose methods are
 	called for RPC service.
@@ -119,19 +138,28 @@ func NewServer(o interface{}) *Server {
 	oType := reflect.TypeOf(o)
 	for m := 0; m < oType.NumMethod(); m++ {
 		method := oType.Method(m)
+		mi := &methodInfo{
+			funcValue: method.Func,
+		}
 		tp := method.Type
 
-		inTypes := make([]reflect.Type, tp.NumIn()-1)
-		for i := range inTypes {
-			inTypes[i] = tp.In(i + 1) // first is receiver, so i + 1
-		}
+		if tp.NumIn() > 1 {
+			first := 1 // tp.In(0) is the receiver
+			if tp.In(1) == pHttpRequestType {
+				mi.needRequest = true
+				first++
+			}
 
-		server.methods[method.Name] = &methodInfo{
-			funcValue: method.Func,
-			inTypes:   inTypes,
+			if tp.NumIn() > first {
+				mi.inTypes = make([]reflect.Type, tp.NumIn()-first)
+				for i := range mi.inTypes {
+					mi.inTypes[i] = tp.In(i + first)
+				}
+			}
 		}
+		server.methods[method.Name] = mi
 	}
-	
+
 	return server
 }
 
@@ -208,7 +236,7 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	}
 
 	if res.Code != errCodeOk {
-		return errors.New(fmt.Sprintf("Error code: %s", res.Code))
+		return errors.New(fmt.Sprintf("Error code: %d", res.Code))
 	}
 
 	for i := range res.Outs {
