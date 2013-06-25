@@ -36,8 +36,8 @@
 package rpc
 
 import (
+	"io"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -65,13 +65,37 @@ type Server struct {
 const DefaultPath = "/_http_rpc"
 
 const (
-	errCodeOk            int = iota // Ok
-	errCodeUnknownMethod            // Unknown method name
+	ErrCodeOk            int = iota // Ok
+	ErrCodeUnknownMethod            // Unknown method name
+	ErrCodePanic					// panic in a call
 )
+
+type RpcError struct {
+	Code int
+	Info string
+}
+
+func (err RpcError) Error() string {
+	switch err.Code {
+	case ErrCodeOk:
+		return "OK"
+	case ErrCodeUnknownMethod:
+		return "Unknown method: " + err.Info
+	case ErrCodePanic:
+		return "Panic in call: " + err.Info
+	}
+	return fmt.Sprintf("Rpc Error: code = %d, info = %s", err.Code, err.Info)
+}
 
 type rpcResponse struct {
 	Code int
+	Info string
 	Outs []string
+}
+
+func (res *rpcResponse) writeTo(w io.Writer) {
+	replyJson, _ := json.Marshal(res)
+	w.Write(replyJson)
 }
 
 /**** Server ****/
@@ -82,11 +106,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	mi := s.methods[mname]
 	if mi == nil {
-		res := rpcResponse{
-			Code: errCodeUnknownMethod,
-		}
-		replyJson, _ := json.Marshal(res)
-		w.Write(replyJson)
+		(&rpcResponse{
+			Code: ErrCodeUnknownMethod,
+			Info: mname,
+		}).writeTo(w)
 		return
 	}
 
@@ -106,19 +129,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		callArr = append(callArr, reflect.Indirect(pInV))
 	}
 
-	outs := mi.funcValue.Call(callArr)
+	outs, hasPanic, info := func() (outs []reflect.Value, hasPanic bool, info string) {
+		defer func() {
+			if err := recover(); err != nil {
+				hasPanic = true
+				info = fmt.Sprint(err)
+			}
+		}()
+		outs = mi.funcValue.Call(callArr)
+		return
+	}()
+	
+	if hasPanic {
+		(&rpcResponse{
+			Code: ErrCodePanic,
+			Info: info,
+		}).writeTo(w)
+		return
+	}
 
 	outJsons := make([]string, len(outs))
 	for i := range outs {
 		outJson, _ := json.Marshal(outs[i].Interface())
 		outJsons[i] = string(outJson)
 	}
-	resp := rpcResponse{
-		Code: errCodeOk,
+	(&rpcResponse{
+		Code: ErrCodeOk,
 		Outs: outJsons,
-	}
-	replyJson, _ := json.Marshal(resp)
-	w.Write(replyJson)
+	}).writeTo(w)
 }
 
 var (
@@ -235,8 +273,8 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 		return err
 	}
 
-	if res.Code != errCodeOk {
-		return errors.New(fmt.Sprintf("Error code: %d", res.Code))
+	if res.Code != ErrCodeOk {
+		return RpcError{Code: res.Code, Info: res.Info}
 	}
 
 	for i := range res.Outs {

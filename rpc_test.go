@@ -69,3 +69,53 @@ func ExampleArith() {
 	// 1 + 2 = 3
 	// 3 - 7 = -4
 }
+
+type bad int
+
+func (b *bad) Panic() {
+	panic("Just panic!")
+}
+
+func TestFail(t *testing.T) {
+	/** Server **/
+	RegisterPath(new(bad), "/rpcbad")
+	go http.ListenAndServe(":1236", nil)
+
+	/** Client **/
+	rpcClient := NewClientPath(http.DefaultClient, "http://localhost:1236", "/rpcbad")
+
+	var C int
+	err := rpcClient.Call(2, "Add", 1, 2, &C)
+	if err == nil {
+		t.Errorf("rpcClient.Call should failed")
+	} else {
+		rpcErr, ok := err.(RpcError)
+		if !ok {
+			t.Errorf("Should be a rpcError, but got %v", err)
+		}
+		
+		if rpcErr.Code != ErrCodeUnknownMethod {
+			t.Errorf("Code should be %d, but got %d", ErrCodeUnknownMethod, rpcErr.Code)
+		}
+		if rpcErr.Info != "Add" {
+			t.Errorf("Info should be %s, but got %s", "Add", rpcErr.Info)
+		}
+	}
+
+	err = rpcClient.Call(2, "Panic", 2, 5, &C)
+	if err == nil {
+		t.Errorf("rpcClient.Call should failed")
+	} else {
+		rpcErr, ok := err.(RpcError)
+		if !ok {
+			t.Errorf("Should be a rpcError, but got %v", err)
+		}
+		
+		if rpcErr.Code != ErrCodePanic {
+			t.Errorf("Code should be %d, but got %d", ErrCodePanic, rpcErr.Code)
+		}
+		if rpcErr.Info != "Just panic!" {
+			t.Errorf("Info should be %s, but got %s", "Just panic!", rpcErr.Info)
+		}
+	}
+}
