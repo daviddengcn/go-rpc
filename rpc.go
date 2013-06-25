@@ -247,7 +247,7 @@ func NewClientPath(httpClient *http.Client, host, path string) *Client {
 	return values (out's) in inPOuts. For return values, the pointers of
 	receiving variables are needed.
 	
-	The following call implies the Method has 3 paramters and 2 return values.
+	The following call implies the Method has 3 parameters and 2 return values.
 	   client.Call(3, "Method", p1, p2, p3, &r1, &r2)
 	
 	If the first parameter of the Method is a *http.Request, it has totally 4
