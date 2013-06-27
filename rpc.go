@@ -37,6 +37,7 @@ package rpc
 
 import (
 	"encoding/json"
+	"github.com/daviddengcn/go-villa"
 	"fmt"
 	"io"
 	"net/http"
@@ -261,7 +262,7 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	for i := range inJsons {
 		inJson, err := json.Marshal(inPOuts[i])
 		if err != nil {
-			return err
+			return villa.NestErrorf(err, "Call(%s) Marshal inPOuts[%d]", method, i)
 		}
 
 		inJsons[i] = string(inJson)
@@ -271,7 +272,7 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 		"in":     inJsons,
 	})
 	if err != nil {
-		return err
+		return villa.NestErrorf(err, "Call(%s) PostFrom", method)
 	}
 	if resp.StatusCode != 200 {
 		return RpcError{
@@ -286,7 +287,7 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	var res rpcResponse
 	err = dec.Decode(&res)
 	if err != nil {
-		return err
+		return villa.NestErrorf(err, "Call(%s) Decode response", method)
 	}
 
 	if res.Code != ErrCodeOk {
@@ -296,7 +297,7 @@ func (c *Client) Call(numIn int, method string, inPOuts ...interface{}) error {
 	for i := range res.Outs {
 		err := json.Unmarshal([]byte(res.Outs[i]), inPOuts[numIn+i])
 		if err != nil {
-			return err
+			return villa.NestErrorf(err, "Call(%s) Unmarshal Outs[%d]", method, i)
 		}
 	}
 
